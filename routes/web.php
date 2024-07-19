@@ -3,7 +3,7 @@
 use App\Http\Controllers\WaypointController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/heel', function () {
+Route::get('/', function () {
     return view('hell1');
 })->name("landings");
 

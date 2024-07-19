@@ -114,33 +114,37 @@ class WaypointController extends Controller
     {
         $startId = (int)$request->start_id;
         $endId = (int)$request->end_id;
-
-        // Validate the input
+    
         if (!$startId || !$endId) {
             return response()->json(['path' => null, 'exception' => 'Both start_id and end_id must be provided.'], 400);
         }
-
-        // Prepare data for the Python script
+    
         $data = [
             'start_id' => $startId,
             'end_id' => $endId
         ];
-
-        // Run the Python script
-        // $pythonScriptPath = public_path('lll.py');
+    
         $pythonScriptPath = public_path('model_train.py');
         $process = new Process(['python3', $pythonScriptPath, json_encode($data)]);
         $process->run();
-
-        // Check for errors
+    
         if (!$process->isSuccessful()) {
             return response()->json(['path' => null, 'exception' => $process->getErrorOutput()], 500);
         }
-
-        // Decode the output from the Python script
-        $result = json_decode($process->getOutput(), true);
-        // return $process->getOutput();
-        // Return the result
+    
+        $output = $process->getOutput();
+        $result = json_decode($output, true);
+    
+        if (isset($result['exception'])) {
+            return response()->json(['path' => null, 'exception' => $result['exception']], 500);
+        }
+    
+        // Check if the model training message is in the output
+        $modelTrainedMessage = 'Model trained and saved successfully.';
+        if (strpos($output, $modelTrainedMessage) !== false) {
+            return response()->json(['message' => $modelTrainedMessage, 'path' => $result], 200);
+        }
+    
         return response()->json($result);
     }
 
