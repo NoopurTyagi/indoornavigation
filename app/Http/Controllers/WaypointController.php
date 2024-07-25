@@ -110,41 +110,106 @@ class WaypointController extends Controller
     //         return response()->json(['error' => 'Internal server error'], 500);
     //     }
     // }
+    // public function getPath(Request $request)
+    // {
+    //     $startId = (int)$request->start_id;
+    //     $endId = (int)$request->end_id;
+
+    //     if (!$startId || !$endId) {
+    //         return response()->json(['path' => null, 'exception' => 'Both start_id and end_id must be provided.'], 400);
+    //     }
+
+    //     $data = [
+    //         'start_id' => $startId,
+    //         'end_id' => $endId
+    //     ];
+
+    //     $pythonScriptPath = public_path('model_train.py');
+    //     // dd($pythonScriptPath);
+    //     $process = new Process(['python3', $pythonScriptPath, json_encode($data)]);
+    //     $process->run();
+
+    //     if (!$process->isSuccessful()) {
+    //         return response()->json(['path' => null, 'exception' => $process->getErrorOutput()], 500);
+    //     }
+
+    //     $output = $process->getOutput();
+    //     $result = json_decode($output, true);
+
+    //     if (isset($result['exception'])) {
+    //         return response()->json(['path' => null, 'exception' => $result['exception']], 500);
+    //     }
+
+    //     // Check if the model training message is in the output
+    //     $modelTrainedMessage = 'Model trained and saved successfully.';
+    //     if (strpos($output, $modelTrainedMessage) !== false) {
+    //         return response()->json(['message' => $modelTrainedMessage, 'path' => $result], 200);
+    //     }
+
+    //     return response()->json($result);
+    // }
+
     public function getPath(Request $request)
     {
         $startId = (int)$request->start_id;
         $endId = (int)$request->end_id;
-    
+
         if (!$startId || !$endId) {
             return response()->json(['path' => null, 'exception' => 'Both start_id and end_id must be provided.'], 400);
         }
-    
+
         $data = [
             'start_id' => $startId,
             'end_id' => $endId
         ];
-    
+
         $pythonScriptPath = public_path('model_train.py');
-        $process = new Process(['python3', $pythonScriptPath, json_encode($data)]);
-        $process->run();
-    
-        if (!$process->isSuccessful()) {
-            return response()->json(['path' => null, 'exception' => $process->getErrorOutput()], 500);
+        $dataJson = json_encode($data);
+
+        // Detect the operating system and set the appropriate command
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            // Windows - Properly escape the JSON data and path
+            $pythonScriptPath = str_replace('/', '\\', $pythonScriptPath);
+            $escapedDataJson = str_replace('"', '\"', $dataJson); // Escape double quotes in JSON
+            $command = "python \"$pythonScriptPath\" \"$escapedDataJson\"";
+        } else {
+            // Unix-like
+            $escapedDataJson = escapeshellarg($dataJson);
+            $command = "python3 $pythonScriptPath $escapedDataJson";
         }
-    
-        $output = $process->getOutput();
+
+        // Log the constructed command for debugging
+        Log::info('Constructed command:', ['command' => $command]);
+
+        // Execute the command and capture both stdout and stderr
+        $output = shell_exec($command . ' 2>&1');
+
+        // Log the output for debugging
+        Log::info('Python script output:', ['output' => $output]);
+
+        if ($output === null) {
+            return response()->json(['path' => null, 'exception' => 'Failed to execute the Python script.'], 500);
+        }
+
+        // Attempt to decode the JSON output
         $result = json_decode($output, true);
-    
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            // Log the JSON error and the raw output for debugging
+            Log::error('Python script output is not valid JSON:', ['output' => $output, 'json_error' => json_last_error_msg()]);
+            return response()->json(['path' => null, 'exception' => 'Invalid JSON output from Python script.'], 500);
+        }
+
         if (isset($result['exception'])) {
             return response()->json(['path' => null, 'exception' => $result['exception']], 500);
         }
-    
+
         // Check if the model training message is in the output
         $modelTrainedMessage = 'Model trained and saved successfully.';
         if (strpos($output, $modelTrainedMessage) !== false) {
             return response()->json(['message' => $modelTrainedMessage, 'path' => $result], 200);
         }
-    
+
         return response()->json($result);
     }
 
@@ -195,7 +260,7 @@ class WaypointController extends Controller
             $sp1  = $request->candidates[0]["content"]["parts"][0]["text"];
             // return json_decode($sp1);
             $sp2 = str_replace(["\n", "\r", "\t"], '', $sp1);
-            
+
             $sp3 = explode(",", $sp2);
 
             foreach ($sp3 as $key => $s) {
@@ -212,28 +277,29 @@ class WaypointController extends Controller
             $ss = explode(",", $sk2);
             $hhh = null;
             foreach ($ss as $s) {
-                
+
                 $trimmedString = trim(preg_replace('/\s+/', ' ', $s));
                 $parts = explode(':', $trimmedString, 2);
                 $key = trim($parts[0], '"');
                 $value = trim($parts[1], '" ');
-                if(str_contains($key,'{"')){
-                    $key = str_replace('{"',"",$key);
-                } 
-                if(str_contains($value,'"}')){
-                    $value = str_replace('"}',"",$value);
+                if (str_contains($key, '{"')) {
+                    $key = str_replace('{"', "", $key);
                 }
-               
-                $hhh[$key] = $value;                
+                if (str_contains($value, '"}')) {
+                    $value = str_replace('"}', "", $value);
+                }
+
+                $hhh[$key] = $value;
             }
 
             $hh = [
-                "asdfas"=>9999,
+                "asdfas" => 9999,
                 "sadfsad" => 454
             ];
             echo "<pre>";
             print_r($hhh);
-            echo "<pre>";die;
+            echo "<pre>";
+            die;
             return $hhh;
         } catch (Exception $e) {
             dd($e);
